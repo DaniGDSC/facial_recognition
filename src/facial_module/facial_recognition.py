@@ -124,44 +124,24 @@ class FacialRecognizer:
 
         except Exception as e:
             print(f"ERROR: Classification failed: {e}")
-            return None, None, None   
-    
-    def compute_similarity(self, emb1: torch.Tensor, emb2: torch.Tensor) -> float:
-        try:
-            if emb1 is None or emb2 is None:
-                return 0.0
-            if emb1.ndim == 2:
-                emb1 = emb1.squeeze(0)
-            if emb2.ndim == 2:
-                emb2 = emb2.squeeze(0)
-            emb1 = F.normalize(emb1, p=2, dim=0)
-            emb2 = F.normalize(emb2, p=2, dim=0)
-            return torch.dot(emb1, emb2).item()
-        except Exception as e:
-            print(f"ERROR: Similarity computation failed: {e}")
-            return 0.0
 
-    def embed_aligned_bgr(self, aligned_bgr: np.ndarray) -> np.ndarray:
-        t = self.process_numpy_array(aligned_bgr)
-        emb = self.extract_features(t)
-        return emb.squeeze(0).detach().cpu().numpy() if emb is not None else None
+recognizer = FacialRecognizer()
 
-def main():   
-    # Initialize recognizer
-    recognizer = FacialRecognizer(
-        device='cuda' if torch.cuda.is_available() else 'cpu',
-        num_classes=None  # Set to number of people if classifier is trained
-    )
-    # Define path to captured faces folder
-    image_path = '/home/un1/projects/facial_recognition/data/captured_faces/aligned_face_20251104_165523.jpg'
-    # Process and extract features from an example image
-    features = recognizer.process_and_extract(image_path)
-    if features is not None:
-        print(f"Extracted features shape: {features.shape}")
-        # Classify the extracted features
-        probabilities, predicted_class, confidence = recognizer.classify(features)
-        if predicted_class is not None:
-            print(f"Predicted class: {predicted_class.item()}, Confidence: {confidence.item()}")
+# 1. Extract embeddings from image file
+features = recognizer.process_and_extract("/home/un1/projects/facial_recognition/data/captured_faces/aligned_face_20251105_113243.jpg")
+print(f"Features shape: {features.shape}")  # torch.Size([1, 512])
+print(f"Features type: {type(features)}")   # <class 'torch.Tensor'>
 
-if __name__ == "__main__":
-    main()
+# 2. Extract from numpy array
+img_array = np.random.randint(0, 255, (160, 160, 3), dtype=np.uint8)
+features = recognizer.process_and_extract_from_array(img_array)
+print(f"Embedding: {features[0][:5]}")  # tensor([ 0.1234, -0.5678,  0.9012, ...])
+
+# 3. Classification (if classifier initialized)
+recognizer_with_classifier = FacialRecognizer(num_classes=3)
+probs, pred_class, confidence = recognizer_with_classifier.classify(features)
+print(f"Probabilities: {probs}")     
+print(f"Predicted: {pred_class}")    
+print(f"Confidence: {confidence}")   
+
+
