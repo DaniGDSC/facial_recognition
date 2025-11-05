@@ -28,9 +28,8 @@ class MetadataDBSetup:
                     first_name TEXT,
                     last_name TEXT,
                     account_status TEXT NOT NULL,           -- Ví dụ: 'ACTIVE', 'LOCKED', 'PENDING'
-                    is_enrolled INTEGER NOT NULL,           -- 1 nếu có template trong Milvus, 0 nếu chưa
                     enrollment_date INTEGER,                -- Timestamp ngày đăng ký
-                    biometric_consent_date INTEGER          -- Timestamp ngày đồng ý sinh trắc học (Compliance)
+                    biometric_consent_date INTEGER          -- Timestamp ngày đồng ý sinh trắc học 
                 );
             """)
             print("SUCCESS: Đã tạo bảng 'user_profiles' với cột 'user_code' (mã 10 số) duy nhất.")
