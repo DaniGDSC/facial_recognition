@@ -6,7 +6,7 @@ import numpy as np
 from typing import Optional, Tuple
 from PIL import Image
 from facenet_pytorch import MTCNN
-from config import (
+from config.config import (
     CAMERA_INDEX, TARGET_BOX_COLOR, SUCCESS_COLOR, FAILURE_COLOR,
     TARGET_BOX_SIZE_RATIO, MIN_FACE_SIZE_RATIO, DESIRED_FACE_SIZE,
     DESIRED_LEFT_EYE, CONFIDENT_THRESHOLD, DEVICE, 

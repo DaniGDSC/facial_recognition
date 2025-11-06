@@ -1,7 +1,7 @@
 import sys
 import cv2
 import numpy as np
-from recognition_controller import FacialRecognitionSystem
+from controller.recognition_controller import FacialRecognitionSystem
 
 def display_recognition_menu():
     """Display camera recognition menu"""

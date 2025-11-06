@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import time
-from config import DATABASE_FILE
+from config.config import DATABASE_FILE
 
 
 

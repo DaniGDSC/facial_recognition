@@ -1,6 +1,6 @@
 import sys
 import re
-from enrollment_controller import UserEnrollmentSystem
+from controller.enrollment_controller import UserEnrollmentSystem
 
 def validate_user_code(user_code: str) -> bool:
     """Validate 10-digit user code format"""

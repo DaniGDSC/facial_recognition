@@ -1,17 +1,7 @@
 import psycopg2
 from psycopg2 import sql
 import os
-
-# --- Cấu hình PostgreSQL ---
-# Cần thay thế các giá trị này bằng thông tin kết nối thực tế của PostgreSQL server
-PG_HOST = "localhost"
-PG_PORT = "5432"
-PG_DATABASE = "face_db"  # Tên database để chứa bảng vector
-PG_USER = "admin"
-PG_PASSWORD = "Daniel@2410" # Vui lòng thay đổi mật khẩu
-COLLECTION_NAME = "face_templates"
-VECTOR_DIMENSION = 512  # Kích thước vector cho FaceNet embedding
-
+from config.database_config import PG_DATABASE, PG_HOST, PG_PASSWORD, PG_PORT, PG_USER, COLLECTION_NAME, VECTOR_DIMENSION
 class PgVectorDBSetup:
     def __init__(self):
         self.conn = None

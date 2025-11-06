@@ -7,8 +7,8 @@ import cv2
 from PIL import Image
 import faiss
 
-from facial_detection import LiveCapture, FacialLiveness, FacialDetectorMTCNN
-from facial_recognition import FacialRecognizer
+from facial_module.facial_detection import LiveCapture, FacialLiveness, FacialDetectorMTCNN
+from facial_module.facial_recognition import FacialRecognizer
 
 class FacialRecognitionSystem:
     def __init__(self, similarity_threshold: float = 0.8, use_faiss: bool = True):
