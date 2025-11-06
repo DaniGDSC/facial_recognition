@@ -9,7 +9,7 @@ import cv2
 
 from facial_detection import LiveCapture, FacialLiveness
 from facial_recognition import FacialRecognizer
-from user_valid_check import UserCodeCheckSystem  # Fixed import
+from user_valid_check import UserCodeCheckSystem
 
 class UserEnrollmentSystem:
     def __init__(self):
