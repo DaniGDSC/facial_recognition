@@ -316,8 +316,3 @@ class FacialRecognitionSystem:
             self.metadata_conn.close()
         if hasattr(self, 'vector_conn'):
             self.vector_conn.close()
-
-if __name__ == "__main__":
-    # Test both FAISS and linear search
-    system = FacialRecognitionSystem(similarity_threshold=0.8, use_faiss=True)   
-    system.close()
