@@ -21,3 +21,5 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # File Security Settings
 MAX_FILE_SIZE_MB = 5  # Maximum file size in megabytes
 JPEG_QUALITY = 90  # JPEG compression quality (1-100)
+
+DATABASE_FILE = "/home/un0/projects/facial_recognition/src/database/metadata.db"

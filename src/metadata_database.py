@@ -1,8 +1,9 @@
 import sqlite3
 import os
 import time
+from config import DATABASE_FILE
 
-DATABASE_FILE = "database/metadata.db"
+
 
 class MetadataDBSetup:
 
@@ -16,7 +17,6 @@ class MetadataDBSetup:
         self.conn.row_factory = sqlite3.Row 
 
     def create_user_profiles_table(self):
-        """Tạo bảng để lưu trữ thông tin người dùng và liên kết với Milvus."""
         try:
             # Xóa bảng cũ nếu tồn tại để đảm bảo schema mới được áp dụng
             self.cursor.execute("DROP TABLE IF EXISTS user_profiles")
