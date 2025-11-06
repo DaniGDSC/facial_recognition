@@ -11,7 +11,7 @@ from facial_detection import LiveCapture, FacialLiveness, FacialDetectorMTCNN
 from facial_recognition import FacialRecognizer
 
 class FacialRecognitionSystem:
-    def __init__(self, similarity_threshold: float = 0.6, use_faiss: bool = True):
+    def __init__(self, similarity_threshold: float = 0.8, use_faiss: bool = True):
         self.similarity_threshold = similarity_threshold
         self.use_faiss = use_faiss
         self.faiss_index = None
@@ -319,14 +319,5 @@ class FacialRecognitionSystem:
 
 if __name__ == "__main__":
     # Test both FAISS and linear search
-    system = FacialRecognitionSystem(similarity_threshold=0.6, use_faiss=True)
-    
-    test_image = cv2.imread("/home/un1/projects/facial_recognition/data/captured_faces/aligned_face_20251105_113243.jpg")
-    if test_image is not None:
-        result = system.recognize_face(test_image, enable_liveness=False)
-        print(f"Result: {result['message']}")
-        print(f"Method: {result.get('search_method', 'Unknown')}")
-        print(f"Time: {result['processing_time']:.3f}s")
-        print(f"Search: {result.get('search_time', 0):.4f}s")
-    
+    system = FacialRecognitionSystem(similarity_threshold=0.8, use_faiss=True)   
     system.close()

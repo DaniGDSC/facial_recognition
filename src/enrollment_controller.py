@@ -54,7 +54,6 @@ class UserEnrollmentSystem:
         print(f"{'='*50}")
         
         try:
-            # STEP 1: Check user code uniqueness - FIXED LOGIC
             print("🔍 STEP 1: Checking user code uniqueness...")
             
             uniqueness_result = self.user_checker.check_user_code_uniqueness(user_code)
