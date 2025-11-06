@@ -11,9 +11,9 @@ DESIRED_LEFT_EYE = (0.35, 0.35)
 CONFIDENT_THRESHOLD = 0.9
 
 # Liveness detection thresholds
-REFLECTION_THRESHOLD = 0.6
-EYE_THRESHOLD = 0.6
-MIN_CONFIDENCE = 0.65
+REFLECTION_THRESHOLD = 0.8
+EYE_THRESHOLD = 0.8
+MIN_CONFIDENCE = 0.8
 
 # Device configuration
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

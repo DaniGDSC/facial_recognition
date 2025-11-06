@@ -6,7 +6,7 @@ import numpy as np
 from typing import Optional, Tuple
 from PIL import Image
 from facenet_pytorch import MTCNN
-from config.config import (
+from config import (
     CAMERA_INDEX, TARGET_BOX_COLOR, SUCCESS_COLOR, FAILURE_COLOR,
     TARGET_BOX_SIZE_RATIO, MIN_FACE_SIZE_RATIO, DESIRED_FACE_SIZE,
     DESIRED_LEFT_EYE, CONFIDENT_THRESHOLD, DEVICE, 
@@ -257,19 +257,4 @@ class LiveCapture:
         cv2.destroyAllWindows()
         return None
 
-def main():
-    print("Starting face capture...")
-    
-    live_capture = LiveCapture(enable_liveness=True, camera_index=0)
-    captured_face = live_capture.start()
-    
-    if captured_face is not None:
-        print("Face captured successfully!")
-        cv2.imshow("Captured Face", captured_face)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-    else:
-        print("Face capture failed or cancelled")
 
-if __name__ == "__main__":
-    main()

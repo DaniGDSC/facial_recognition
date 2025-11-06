@@ -7,8 +7,8 @@ import sqlite3
 import psycopg2
 import cv2
 
-from facial_module.facial_detection import LiveCapture, FacialLiveness
-from facial_module.facial_recognition import FacialRecognizer
+from facial_detection import LiveCapture, FacialLiveness
+from facial_recognition import FacialRecognizer
 from user_valid_check import UserCodeCheckSystem
 
 class UserEnrollmentSystem:

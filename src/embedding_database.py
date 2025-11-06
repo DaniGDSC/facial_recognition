@@ -1,7 +1,7 @@
 import psycopg2
 from psycopg2 import sql
 import os
-from config.database_config import PG_DATABASE, PG_HOST, PG_PASSWORD, PG_PORT, PG_USER, COLLECTION_NAME, VECTOR_DIMENSION
+from database_config import PG_DATABASE, PG_HOST, PG_PASSWORD, PG_PORT, PG_USER, COLLECTION_NAME, VECTOR_DIMENSION
 class PgVectorDBSetup:
     def __init__(self):
         self.conn = None
