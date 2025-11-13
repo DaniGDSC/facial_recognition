@@ -114,7 +114,6 @@ def get_menu_choice(min_choice, max_choice, max_attempts=MAX_INPUT_ATTEMPTS):
 
 
 def format_liveness_status(result, liveness_enabled=None):
-    """Return liveness status string with Disabled/N/A/Pass/Fail."""
     liveness_result = result.get('liveness_result')
     if not liveness_result:
         return "N/A (ERROR)"
