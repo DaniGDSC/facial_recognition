@@ -1,3 +1,4 @@
+import logging
 import time
 import numpy as np
 from typing import Optional, Dict, Any, List, Tuple
@@ -9,6 +10,10 @@ import faiss
 
 from facial_detection import LiveCapture, FacialLiveness, FacialDetectorMTCNN
 from facial_recognition import FacialRecognizer
+from config import DATABASE_FILE
+from database_config import PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD
+
+logger = logging.getLogger(__name__)
 
 class FacialRecognitionSystem:
     def __init__(self, similarity_threshold: float = 0.8, use_faiss: bool = True):
@@ -31,12 +36,12 @@ class FacialRecognitionSystem:
             self._build_faiss_index()
         
     def setup_databases(self):
-        self.metadata_conn = sqlite3.connect("/home/un1/projects/facial_recognition/src/database/metadata.db")
+        self.metadata_conn = sqlite3.connect(DATABASE_FILE)
         self.metadata_conn.row_factory = sqlite3.Row
-        
+
         self.vector_conn = psycopg2.connect(
-            host="localhost", port="5432", database="face_db",
-            user="admin", password="Daniel@2410"
+            host=PG_HOST, port=PG_PORT, database=PG_DATABASE,
+            user=PG_USER, password=PG_PASSWORD
         )
         self.vector_conn.autocommit = True
     
@@ -61,9 +66,10 @@ class FacialRecognitionSystem:
                 }
             
             return users
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to load enrolled users: {e}")
             return {}
-    
+
     def get_all_embeddings(self) -> List[Tuple[str, np.ndarray]]:
         try:
             cursor = self.vector_conn.cursor()
@@ -78,7 +84,8 @@ class FacialRecognitionSystem:
                 embeddings.append((user_code, embedding))
             
             return embeddings
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to load embeddings: {e}")
             return []
     
     def _build_faiss_index(self):
@@ -112,7 +119,8 @@ class FacialRecognitionSystem:
             faiss.normalize_L2(embeddings_matrix)
             self.faiss_index.add(embeddings_matrix)
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to build FAISS index: {e}")
             self.faiss_index = None
     
     def fast_similarity_search(self, query_vector: np.ndarray, top_k: int = 5) -> List[Tuple[str, float]]:
@@ -137,7 +145,8 @@ class FacialRecognitionSystem:
                     results.append((user_code, float(similarity_score)))
             
             return results
-        except Exception:
+        except Exception as e:
+            logger.warning(f"FAISS search failed, falling back to linear: {e}")
             return self._linear_search(query_vector, top_k)
     
     def _linear_search(self, query_vector: np.ndarray, top_k: int) -> List[Tuple[str, float]]:
@@ -180,7 +189,8 @@ class FacialRecognitionSystem:
             face_region = rgb_image[y1_exp:y2_exp, x1_exp:x2_exp]
             
             return face_region, np.array([x1, y1, x2, y2]), face_landmarks
-        except Exception:
+        except Exception as e:
+            logger.error(f"Face detection/extraction failed: {e}")
             return None, None, None
     
     def check_liveness(self, image: np.ndarray) -> Dict[str, Any]:
@@ -296,20 +306,20 @@ class FacialRecognitionSystem:
         except Exception as e:
             return {'success': False, 'message': f'Camera error: {str(e)}'}
     
-    def _log_event(self, event_type: str, user_code: str, success: bool, 
+    def _log_event(self, event_type: str, user_code: str, success: bool,
                    similarity: float, liveness_passed: bool):
         try:
             cursor = self.metadata_conn.cursor()
             cursor.execute("""
-                INSERT INTO biometric_audit_log 
-                (user_code, timestamp, event_type, similarity_score, spoof_detected, device_ip)
+                INSERT INTO biometric_audit_log
+                (user_id, timestamp, event_type, similarity_score, spoof_detected, device_ip)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (user_code, int(time.time()), 
+            """, (user_code, int(time.time()),
                   f'{event_type}_{"Success" if success else "Failed"}',
                   similarity, 0 if liveness_passed else 1, "127.0.0.1"))
             self.metadata_conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to log {event_type} event for {user_code}: {e}")
     
     def close(self):
         if hasattr(self, 'metadata_conn'):

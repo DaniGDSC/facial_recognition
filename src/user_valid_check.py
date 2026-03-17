@@ -1,10 +1,12 @@
+import logging
 import sqlite3
+from config import DATABASE_FILE
+
+logger = logging.getLogger(__name__)
 
 class UserCodeCheckSystem:
     def __init__(self):
-        self.metadata_client = sqlite3.connect(
-            "/home/un1/projects/facial_recognition/src/database/metadata.db"
-        )
+        self.metadata_client = sqlite3.connect(DATABASE_FILE)
         self.metadata_client.row_factory = sqlite3.Row
 
     def check_user_code_uniqueness(self, user_code: str) -> str:
@@ -24,7 +26,8 @@ class UserCodeCheckSystem:
                 return f"THÀNH CÔNG: User code {user_code} is available"
                 
         except Exception as e:
-            return f"THẤT BẠI: Database error - {str(e)}"
+            logger.error(f"Database error during user code check: {e}")
+            return "THẤT BẠI: Database error occurred"
 
     def get_user_info(self, user_code: str) -> dict:
         """Get user information by user code"""
@@ -52,7 +55,8 @@ class UserCodeCheckSystem:
                 return {'found': False, 'message': 'User not found'}
                 
         except Exception as e:
-            return {'found': False, 'message': f'Database error: {str(e)}'}
+            logger.error(f"Database error during user info lookup: {e}")
+            return {'found': False, 'message': 'Database error occurred'}
 
     def close(self):
         if hasattr(self, 'metadata_client'):

@@ -1,3 +1,4 @@
+import os
 import torch
 
 CAMERA_INDEX = 0
@@ -22,4 +23,7 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 MAX_FILE_SIZE_MB = 5  # Maximum file size in megabytes
 JPEG_QUALITY = 90  # JPEG compression quality (1-100)
 
-DATABASE_FILE = "/home/un0/projects/facial_recognition/src/database/metadata.db"
+DATABASE_FILE = os.environ.get(
+    "DATABASE_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "database", "metadata.db")
+)

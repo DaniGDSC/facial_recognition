@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database files
+*.db
+
+# Biometric data
+data/enrolled_faces/
+
+# OS
+.DS_Store
+Thumbs.db

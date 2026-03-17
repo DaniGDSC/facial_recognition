@@ -106,13 +106,18 @@ class ProductionRecognitionInterface:
 
 def build_auth_result(recognition_result, security_level) -> dict:
     """Build structured auth result from recognition system output"""
-    # Dummy implementation: always return success with dummy user data
+    success = recognition_result.get('success', False)
+    recognized = recognition_result.get('recognized', False)
+    user_info = recognition_result.get('user_info')
+
     return {
-        'authenticated': True,
-        'user_id': '12345',
+        'authenticated': bool(success and recognized),
+        'user_id': user_info.get('user_id') if user_info else None,
         'security_level': security_level,
+        'similarity_score': recognition_result.get('similarity_score', 0.0),
+        'liveness_result': recognition_result.get('liveness_result'),
+        'processing_time': recognition_result.get('processing_time', 0.0),
         'attributes': {
-            'name': 'John Doe',
-            'role': 'admin'
-        }
+            'name': user_info.get('full_name', 'Unknown'),
+        } if user_info else None
     }

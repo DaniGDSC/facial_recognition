@@ -1,7 +1,9 @@
+import logging
+
 from recognition_controller import FacialRecognitionSystem
 from recognition_constants import (
-    UNIFORM_ACCESS_DENIED, 
-    UNIFORM_OPERATION_FAIL, 
+    UNIFORM_ACCESS_DENIED,
+    UNIFORM_OPERATION_FAIL,
     MAX_INPUT_ATTEMPTS,
     HIGH_SECURITY_THRESHOLD,
     SECONDS_PER_DAY,
@@ -9,6 +11,8 @@ from recognition_constants import (
     MAX_AUTH_ATTEMPTS_PER_HOUR,
     COOLDOWN_PERIOD_SECONDS
 )
+
+logger = logging.getLogger(__name__)
 
 def display_recognition_menu():
     """Display camera recognition menu"""
@@ -226,8 +230,8 @@ def authenticate_secure_access(recognition_system):
     finally:
         try:
             recognition_system.similarity_threshold = original_threshold
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to restore similarity threshold: {e}")
 
 def display_recognition_results(result):
     print("\n" + "=" * 50)
@@ -357,8 +361,8 @@ def main():
             if recognition_system:
                 recognition_system.close()
                 print("🔧 System closed")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to close recognition system: {e}")
 
 if __name__ == "__main__":
     main()

@@ -18,11 +18,8 @@ class MetadataDBSetup:
 
     def create_user_profiles_table(self):
         try:
-            # Xóa bảng cũ nếu tồn tại để đảm bảo schema mới được áp dụng
-            self.cursor.execute("DROP TABLE IF EXISTS user_profiles")
-
             self.cursor.execute("""
-                CREATE TABLE user_profiles (
+                CREATE TABLE IF NOT EXISTS user_profiles (
                     user_id TEXT PRIMARY KEY,               -- UUID Liên kết chính với Milvus Vector
                     user_code TEXT UNIQUE NOT NULL,         -- MÃ 10 SỐ CỦA USER (PII), phải là DUY NHẤT
                     first_name TEXT,
@@ -37,13 +34,10 @@ class MetadataDBSetup:
             print(f"ERROR: Lỗi khi tạo bảng user_profiles: {e}")
 
     def create_audit_log_table(self):
-        """Tạo bảng để ghi lại tất cả các lần truy cập và kiểm tra sinh trắc học."""
+        """Create biometric audit log table."""
         try:
-            # Xóa bảng cũ nếu tồn tại để đảm bảo schema mới được áp dụng
-            self.cursor.execute("DROP TABLE IF EXISTS biometric_audit_log")
-
             self.cursor.execute("""
-                CREATE TABLE biometric_audit_log (
+                CREATE TABLE IF NOT EXISTS biometric_audit_log (
                     log_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT,                               -- Liên kết đến user_profiles
                     timestamp INTEGER NOT NULL,                 -- Thời điểm sự kiện xảy ra
@@ -68,11 +62,6 @@ def main():
     """Chạy quy trình thiết lập database Metadata."""
     print("--- KHỞI TẠO METADATA DATABASE (SQLITE) ---")
     setup = None
-    # Xóa file cũ để bắt đầu sạch sẽ với schema mới (chỉ dùng khi phát triển)
-    if os.path.exists(DATABASE_FILE):
-         os.remove(DATABASE_FILE)
-         print(f"INFO: Đã xóa file cũ '{DATABASE_FILE}' để đảm bảo schema mới.")
-
     try:
         # Khởi tạo kết nối
         setup = MetadataDBSetup()

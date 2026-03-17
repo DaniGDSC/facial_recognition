@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import logging
 import numpy as np
 from typing import Optional, Dict, Any
 import sqlite3
@@ -10,6 +11,10 @@ import cv2
 from facial_detection import LiveCapture, FacialLiveness
 from facial_recognition import FacialRecognizer
 from user_valid_check import UserCodeCheckSystem
+from config import DATABASE_FILE
+from database_config import PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD
+
+logger = logging.getLogger(__name__)
 
 class UserEnrollmentSystem:
     def __init__(self):
@@ -27,19 +32,19 @@ class UserEnrollmentSystem:
         """Initialize database connections"""
         try:
             # SQLite for metadata
-            self.metadata_conn = sqlite3.connect("/home/un1/projects/facial_recognition/src/database/metadata.db")
+            self.metadata_conn = sqlite3.connect(DATABASE_FILE)
             self.metadata_conn.row_factory = sqlite3.Row
-            
+
             # PostgreSQL for embeddings
             self.vector_conn = psycopg2.connect(
-                host="localhost",
-                port="5432", 
-                database="face_db",
-                user="admin",
-                password="Daniel@2410"
+                host=PG_HOST,
+                port=PG_PORT,
+                database=PG_DATABASE,
+                user=PG_USER,
+                password=PG_PASSWORD
             )
             self.vector_conn.autocommit = True
-            
+
         except Exception as e:
             raise RuntimeError(f"Database connection failed: {e}")
     
@@ -221,25 +226,29 @@ class UserEnrollmentSystem:
         try:
             cursor = self.metadata_conn.cursor()
             cursor.execute("""
-                INSERT INTO biometric_audit_log 
+                INSERT INTO biometric_audit_log
                 (user_id, timestamp, event_type, similarity_score, spoof_detected, device_ip)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (user_id, int(time.time()), 'Enroll', score, 0, ip))
             self.metadata_conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to log enrollment event for user {user_id}: {e}")
     
     def _save_enrollment_image(self, face_image: np.ndarray, user_id: str):
         """Save enrollment image"""
         try:
-            output_dir = "/home/un1/projects/facial_recognition/data/enrolled_faces"
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            output_dir = os.environ.get(
+                "ENROLLED_FACES_DIR",
+                os.path.join(base_dir, "data", "enrolled_faces")
+            )
             os.makedirs(output_dir, exist_ok=True)
-            
+
             filename = f"enrolled_{user_id}_{int(time.time())}.jpg"
             filepath = os.path.join(output_dir, filename)
             cv2.imwrite(filepath, face_image)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to save enrollment image for user {user_id}: {e}")
     
     def close(self):
         """Close connections"""
