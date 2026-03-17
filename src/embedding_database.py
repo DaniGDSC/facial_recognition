@@ -1,11 +1,14 @@
+import logging
 import psycopg2
 from psycopg2 import sql
-import os
 from database_config import PG_DATABASE, PG_HOST, PG_PASSWORD, PG_PORT, PG_USER, COLLECTION_NAME, VECTOR_DIMENSION
+
+logger = logging.getLogger(__name__)
+
+
 class PgVectorDBSetup:
     def __init__(self):
         self.conn = None
-        # 1. Thiết lập kết nối PostgreSQL
         try:
             self.conn = psycopg2.connect(
                 host=PG_HOST,
@@ -15,98 +18,93 @@ class PgVectorDBSetup:
                 password=PG_PASSWORD
             )
             self.conn.autocommit = True
-            print(f"SUCCESS: Đã kết nối đến PostgreSQL DB '{PG_DATABASE}'.")
+            logger.info("Connected to PostgreSQL DB '%s'", PG_DATABASE)
         except psycopg2.OperationalError as e:
-            print(f"ERROR: Không thể kết nối đến PostgreSQL. Vui lòng kiểm tra dịch vụ và thông tin đăng nhập.")
-            print(f"Chi tiết: {e}")
-            raise RuntimeError("Không thể kết nối PostgreSQL.")
+            logger.error("Cannot connect to PostgreSQL: %s", e)
+            raise RuntimeError("Cannot connect to PostgreSQL.")
         except Exception as e:
-            print(f"ERROR: Xảy ra lỗi không xác định khi kết nối DB: {e}")
-            raise RuntimeError("Không thể kết nối PostgreSQL.")
-        
+            logger.error("Unknown error connecting to DB: %s", e)
+            raise RuntimeError("Cannot connect to PostgreSQL.")
+
     def _execute_sql(self, query: sql.SQL, *args):
-        """Hàm hỗ trợ thực thi SQL an toàn."""
+        """Execute SQL safely."""
         try:
             with self.conn.cursor() as cur:
                 cur.execute(query, args)
                 return True
         except psycopg2.Error as e:
-            print(f"PostgreSQL ERROR: Lỗi thực thi SQL: {e}")
+            logger.error("SQL execution error: %s", e)
             return False
 
     def setup_pgvector(self):
-        """Đảm bảo extension pgvector đã được kích hoạt."""
-        print(f"INFO: Đang kiểm tra và kích hoạt extension 'vector'...")
-        # Lệnh SQL để tạo extension vector
+        """Ensure pgvector extension is enabled."""
+        logger.info("Checking and enabling 'vector' extension...")
         create_extension_query = sql.SQL("CREATE EXTENSION IF NOT EXISTS vector;")
         if self._execute_sql(create_extension_query):
-            print("SUCCESS: Extension 'vector' đã sẵn sàng.")
+            logger.info("Extension 'vector' is ready")
         else:
-            print("FATAL: Không thể tạo extension 'vector'. Đảm bảo pgvector đã được cài đặt trên PostgreSQL server.")
-            raise RuntimeError("Cần cài đặt pgvector.")
-
+            logger.critical("Cannot create 'vector' extension. Ensure pgvector is installed.")
+            raise RuntimeError("pgvector installation required.")
 
     def create_face_collection(self):
-        """
-        Tạo bảng 'face_templates' với cột vector 512 chiều.
-        """
-        
-        # 2. Định nghĩa Schema (Cấu trúc bảng)
-        # Sử dụng UUID làm Primary Key và user_id cho mục đích liên kết.
-        # face_vector là cột vector 512 chiều.
+        """Create 'face_templates' table with 512-dim vector column."""
         create_table_query = sql.SQL("""
             CREATE TABLE IF NOT EXISTS {table_name} (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- ID chính của vector
-                user_id VARCHAR(100) UNIQUE NOT NULL,         -- UUID liên kết với Metadata DB (giống Milvus)
-                enrollment_date BIGINT NOT NULL,              -- Timestamp ngày đăng ký
-                face_vector vector({dim})                     -- Cột vector 512 chiều
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id VARCHAR(100) UNIQUE NOT NULL,
+                enrollment_date BIGINT NOT NULL,
+                face_vector vector({dim})
             );
         """).format(
             table_name=sql.Identifier(COLLECTION_NAME),
             dim=sql.Literal(VECTOR_DIMENSION)
         )
 
-        print(f"INFO: Đang tạo hoặc xác nhận bảng '{COLLECTION_NAME}'...")
+        logger.info("Creating or verifying table '%s'...", COLLECTION_NAME)
         if self._execute_sql(create_table_query):
-            print(f"SUCCESS: Đã tạo bảng '{COLLECTION_NAME}'.")
+            logger.info("Table '%s' ready", COLLECTION_NAME)
         else:
-            print("ERROR: Không thể tạo bảng. Vui lòng kiểm tra lại cấu hình.")
+            logger.error("Cannot create table '%s'", COLLECTION_NAME)
             return
 
-
         index_query = sql.SQL("""
-            CREATE INDEX IF NOT EXISTS face_vector_ivfflat_idx 
+            CREATE INDEX IF NOT EXISTS face_vector_ivfflat_idx
             ON {table_name} USING ivfflat (face_vector) WITH (lists = 100);
         """).format(table_name=sql.Identifier(COLLECTION_NAME))
-        
-        print("INFO: Đang tạo chỉ mục IVFFlat trên cột vector...")
+
+        logger.info("Creating IVFFlat index on vector column...")
         if self._execute_sql(index_query):
-            print("SUCCESS: Đã tạo Index IVFFlat trên trường 'face_vector'.")
+            logger.info("IVFFlat index created on 'face_vector'")
         else:
-            print("WARNING: Không thể tạo Index. Hiệu suất tìm kiếm có thể bị ảnh hưởng.")
+            logger.warning("Cannot create index. Search performance may be affected.")
 
     def close(self):
-        """Đóng kết nối database."""
+        """Close database connection."""
         if self.conn:
             self.conn.close()
-            print("INFO: Đã đóng kết nối tới PostgreSQL.")
+            logger.info("Closed PostgreSQL connection")
+
 
 def main():
-    """Chạy quy trình thiết lập database pgvector."""
-    print("--- KHỞI TẠO EMBEDDING DATABASE (POSTGRESQL + PGVECTOR) ---")
+    """Run pgvector database setup."""
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    logger.info("--- EMBEDDING DATABASE SETUP (POSTGRESQL + PGVECTOR) ---")
     setup = None
     try:
         setup = PgVectorDBSetup()
         setup.setup_pgvector()
         setup.create_face_collection()
-        print("\nSETUP COMPLETE: Database PostgreSQL + pgvector đã sẵn sàng cho vector khuôn mặt 512 chiều.")
+        logger.info("SETUP COMPLETE: PostgreSQL + pgvector ready for 512-dim face vectors")
     except RuntimeError:
-        print("\nSETUP FAILED: Không thể tiếp tục do lỗi kết nối hoặc cấu hình PostgreSQL.")
+        logger.error("SETUP FAILED: Connection or configuration error")
     except Exception as e:
-        print(f"\nSETUP FAILED: Xảy ra lỗi không xác định: {e}")
+        logger.exception("SETUP FAILED: Unknown error: %s", e)
     finally:
         if setup:
             setup.close()
+
 
 if __name__ == "__main__":
     main()

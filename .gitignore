@@ -23,6 +23,12 @@ venv/
 # Biometric data
 data/enrolled_faces/
 
+# Pre-commit
+.secrets.baseline
+
+# Logs
+*.log
+
 # OS
 .DS_Store
 Thumbs.db

@@ -160,13 +160,14 @@ class LiveCapture:
         self.cap = cv2.VideoCapture(camera_index)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        
+
         self.detector = FacialDetectorMTCNN()
         self.aligner = FacialAlignment()
         self.enable_liveness = enable_liveness
-        
+
         if enable_liveness:
-            self.liveness_detector = FacialLiveness()
+            from liveness import MultiFactorLiveness
+            self.liveness_detector = MultiFactorLiveness()
 
     def start(self) -> Optional[np.ndarray]:
         if not self.cap.isOpened():

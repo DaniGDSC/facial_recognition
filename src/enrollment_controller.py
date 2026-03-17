@@ -3,224 +3,195 @@ import time
 import uuid
 import logging
 import numpy as np
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 import sqlite3
 import psycopg2
 import cv2
 
-from facial_detection import LiveCapture, FacialLiveness
+from facial_detection import LiveCapture
 from facial_recognition import FacialRecognizer
 from user_valid_check import UserCodeCheckSystem
-from config import DATABASE_FILE
-from database_config import PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD
+from db import get_metadata_connection, get_vector_connection
+from crypto import encrypt_image, compute_embedding_hmac
 
 logger = logging.getLogger(__name__)
 
+def _get_optional_key(env_var: str) -> bytes | None:
+    """Load an optional hex-encoded key from env, return None if not set."""
+    raw = os.environ.get(env_var)
+    if not raw:
+        return None
+    return bytes.fromhex(raw)
+
+
 class UserEnrollmentSystem:
     def __init__(self):
-        print("🔧 Initializing enrollment system...")
-        
+        logger.info("Initializing enrollment system...")
+
         # Initialize components
         self.user_checker = UserCodeCheckSystem()
         self.recognizer = FacialRecognizer(device='cpu')
-        
+
         # Database connections
-        self.setup_databases()
-        print("✅ Enrollment system ready")
-        
-    def setup_databases(self):
-        """Initialize database connections"""
-        try:
-            # SQLite for metadata
-            self.metadata_conn = sqlite3.connect(DATABASE_FILE)
-            self.metadata_conn.row_factory = sqlite3.Row
+        self.metadata_conn = get_metadata_connection()
+        self.vector_conn = get_vector_connection()
+        logger.info("Enrollment system ready")
 
-            # PostgreSQL for embeddings
-            self.vector_conn = psycopg2.connect(
-                host=PG_HOST,
-                port=PG_PORT,
-                database=PG_DATABASE,
-                user=PG_USER,
-                password=PG_PASSWORD
-            )
-            self.vector_conn.autocommit = True
-
-        except Exception as e:
-            raise RuntimeError(f"Database connection failed: {e}")
-    
-    def enroll_new_user(self, user_code: str, first_name: str, last_name: str, 
+    def enroll_new_user(self, user_code: str, first_name: str, last_name: str,
                        enable_liveness: bool = True) -> Dict[str, Any]:
         """Complete user enrollment pipeline with proper validation"""
-        
-        print(f"\n{'='*50}")
-        print(f"  STARTING USER ENROLLMENT")
-        print(f"  User Code: {user_code}")
-        print(f"  Name: {first_name} {last_name}")
-        print(f"{'='*50}")
-        
+
+        logger.info("Starting enrollment for user_code=%s, name=%s %s",
+                     user_code, first_name, last_name)
+
         try:
-            print("🔍 STEP 1: Checking user code uniqueness...")
-            
+            # STEP 1: Check uniqueness
+            logger.info("STEP 1: Checking user code uniqueness...")
             uniqueness_result = self.user_checker.check_user_code_uniqueness(user_code)
-            print(f"   Validation result: {uniqueness_result}")
-            
-            # FIXED: Check for failure message properly
+            logger.info("Validation result: %s", uniqueness_result)
+
             if "THẤT BẠI" in uniqueness_result or "already exists" in uniqueness_result:
-                print("❌ ENROLLMENT BLOCKED: User code already exists!")
+                logger.warning("Enrollment blocked: user code %s already exists", user_code)
                 return {
-                    'success': False,
-                    'user_id': None,
+                    'success': False, 'user_id': None,
                     'message': f"User code {user_code} already exists in database",
-                    'similarity_score': 0.0,
-                    'liveness_passed': False
+                    'similarity_score': 0.0, 'liveness_passed': False
                 }
-            
-            print("✅ STEP 1: User code is unique and available")
-            
+
+            logger.info("STEP 1 passed: user code is unique")
+
             # STEP 2: Capture face
-            print("\n📷 STEP 2: Starting face capture...")
-            print("   Position face in camera and press SPACE when ready")
-            
+            logger.info("STEP 2: Starting face capture...")
             live_capture = LiveCapture(enable_liveness=enable_liveness, camera_index=0)
             captured_face = live_capture.start()
-            
+
             if captured_face is None:
                 return {
-                    'success': False,
-                    'user_id': None,
+                    'success': False, 'user_id': None,
                     'message': "Face capture failed or cancelled",
-                    'similarity_score': 0.0,
-                    'liveness_passed': False
+                    'similarity_score': 0.0, 'liveness_passed': False
                 }
-            
-            print("✅ STEP 2: Face captured successfully")
-            
+
+            logger.info("STEP 2 passed: face captured")
+
             # STEP 3: Extract features
-            print("\n🧠 STEP 3: Extracting facial features...")
-            
+            logger.info("STEP 3: Extracting facial features...")
             embeddings = self.recognizer.process_and_extract_from_array(captured_face)
             if embeddings is None:
                 return {
-                    'success': False,
-                    'user_id': None,
+                    'success': False, 'user_id': None,
                     'message': "Feature extraction failed",
-                    'similarity_score': 0.0,
-                    'liveness_passed': False
+                    'similarity_score': 0.0, 'liveness_passed': False
                 }
-            
+
             embedding_vector = embeddings[0].cpu().numpy()
-            print(f"✅ STEP 3: Generated {len(embedding_vector)}-D embedding")
-            
+            logger.info("STEP 3 passed: generated %d-D embedding", len(embedding_vector))
+
             # STEP 4: Store in databases
-            print("\n💾 STEP 4: Storing user data...")
-            
+            logger.info("STEP 4: Storing user data...")
+
             user_id = str(uuid.uuid4())
             current_timestamp = int(time.time())
-            
-            # Store metadata
+
             success_metadata = self._store_user_metadata(
                 user_id, user_code, first_name, last_name, current_timestamp
             )
-            
             if not success_metadata:
                 return {
-                    'success': False,
-                    'user_id': None,
+                    'success': False, 'user_id': None,
                     'message': "Failed to store user metadata",
-                    'similarity_score': 0.0,
-                    'liveness_passed': False
+                    'similarity_score': 0.0, 'liveness_passed': False
                 }
-            
-            # Store embedding
+
             success_embedding = self._store_user_embedding(
                 user_id, user_code, embedding_vector, current_timestamp
             )
-            
             if not success_embedding:
                 self._rollback_metadata(user_id)
                 return {
-                    'success': False,
-                    'user_id': None,
+                    'success': False, 'user_id': None,
                     'message': "Failed to store face embedding",
-                    'similarity_score': 0.0,
-                    'liveness_passed': False
+                    'similarity_score': 0.0, 'liveness_passed': False
                 }
-            
-            print("✅ STEP 4: User data stored successfully")
-            
+
+            logger.info("STEP 4 passed: user data stored")
+
             # STEP 5: Finalize
             self._log_enrollment_event(user_id, True, 1.0, "127.0.0.1")
             self._save_enrollment_image(captured_face, user_id)
-            
-            print(f"\n🎉 ENROLLMENT COMPLETED SUCCESSFULLY!")
-            print(f"   User ID: {user_id}")
-            print(f"   User Code: {user_code}")
-            print(f"   Name: {first_name} {last_name}")
-            
+
+            logger.info("Enrollment completed: user_id=%s, user_code=%s", user_id, user_code)
+
             return {
-                'success': True,
-                'user_id': user_id,
+                'success': True, 'user_id': user_id,
                 'message': "User enrolled successfully",
-                'similarity_score': 1.0,
-                'liveness_passed': enable_liveness
+                'similarity_score': 1.0, 'liveness_passed': enable_liveness
             }
-            
+
         except Exception as e:
-            print(f"💥 ERROR: Enrollment failed: {e}")
+            logger.exception("Enrollment failed for user_code=%s", user_code)
             return {
-                'success': False,
-                'user_id': None,
+                'success': False, 'user_id': None,
                 'message': f"Enrollment error: {str(e)}",
-                'similarity_score': 0.0,
-                'liveness_passed': False
+                'similarity_score': 0.0, 'liveness_passed': False
             }
-    
-    def _store_user_metadata(self, user_id: str, user_code: str, first_name: str, 
+
+    def _store_user_metadata(self, user_id: str, user_code: str, first_name: str,
                            last_name: str, timestamp: int) -> bool:
         """Store user profile in SQLite"""
         try:
             cursor = self.metadata_conn.cursor()
             cursor.execute("""
-                INSERT INTO user_profiles 
+                INSERT INTO user_profiles
                 (user_id, user_code, first_name, last_name, account_status, enrollment_date, biometric_consent_date)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (user_id, user_code, first_name, last_name, 'ACTIVE', timestamp, timestamp))
-            
             self.metadata_conn.commit()
             return True
-            
         except sqlite3.Error as e:
-            print(f"❌ Metadata storage failed: {e}")
+            logger.error("Metadata storage failed: %s", e)
             return False
-    
-    def _store_user_embedding(self, user_id: str, user_code: str, 
+
+    def _store_user_embedding(self, user_id: str, user_code: str,
                             embedding: np.ndarray, timestamp: int) -> bool:
-        """Store embedding in PostgreSQL"""
+        """Store embedding in PostgreSQL with optional HMAC integrity tag."""
         try:
             cursor = self.vector_conn.cursor()
-            vector_str = '[' + ','.join(map(str, embedding.tolist())) + ']'
-            
-            cursor.execute("""
-                INSERT INTO face_templates (user_id, enrollment_date, face_vector)
-                VALUES (%s, %s, %s::vector)
-            """, (user_code, timestamp, vector_str))
-            
+            embedding_list = embedding.tolist()
+            vector_str = '[' + ','.join(map(str, embedding_list)) + ']'
+
+            # Compute HMAC if key is available
+            hmac_key = _get_optional_key("EMBEDDING_HMAC_KEY")
+            hmac_tag = compute_embedding_hmac(embedding_list, hmac_key) if hmac_key else None
+
+            if hmac_tag:
+                cursor.execute("""
+                    INSERT INTO face_templates (user_id, enrollment_date, face_vector, hmac_tag)
+                    VALUES (%s, %s, %s::vector, %s)
+                """, (user_code, timestamp, vector_str, hmac_tag))
+                logger.info("Stored embedding with HMAC integrity tag")
+            else:
+                cursor.execute("""
+                    INSERT INTO face_templates (user_id, enrollment_date, face_vector)
+                    VALUES (%s, %s, %s::vector)
+                """, (user_code, timestamp, vector_str))
+                logger.warning("Stored embedding WITHOUT HMAC — set EMBEDDING_HMAC_KEY for integrity protection")
+
             return True
-            
         except psycopg2.Error as e:
-            print(f"❌ Embedding storage failed: {e}")
+            logger.error("Embedding storage failed: %s", e)
             return False
-    
+
     def _rollback_metadata(self, user_id: str):
         """Remove metadata on failure"""
         try:
             cursor = self.metadata_conn.cursor()
             cursor.execute("DELETE FROM user_profiles WHERE user_id = ?", (user_id,))
             self.metadata_conn.commit()
-            print("🔄 Metadata rollback completed")
+            logger.info("Metadata rollback completed for user_id=%s", user_id)
         except Exception as e:
-            print(f"⚠️  Rollback failed: {e}")
-    
+            logger.error("Rollback failed for user_id=%s: %s", user_id, e)
+
     def _log_enrollment_event(self, user_id: str, success: bool, score: float, ip: str):
         """Log enrollment event"""
         try:
@@ -232,10 +203,10 @@ class UserEnrollmentSystem:
             """, (user_id, int(time.time()), 'Enroll', score, 0, ip))
             self.metadata_conn.commit()
         except Exception as e:
-            logger.error(f"Failed to log enrollment event for user {user_id}: {e}")
-    
+            logger.error("Failed to log enrollment event for user %s: %s", user_id, e)
+
     def _save_enrollment_image(self, face_image: np.ndarray, user_id: str):
-        """Save enrollment image"""
+        """Save enrollment image, encrypted at rest if key is available."""
         try:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             output_dir = os.environ.get(
@@ -244,12 +215,29 @@ class UserEnrollmentSystem:
             )
             os.makedirs(output_dir, exist_ok=True)
 
-            filename = f"enrolled_{user_id}_{int(time.time())}.jpg"
-            filepath = os.path.join(output_dir, filename)
-            cv2.imwrite(filepath, face_image)
+            enc_key = _get_optional_key("BIOMETRIC_ENCRYPTION_KEY")
+            _, img_bytes = cv2.imencode(".jpg", face_image)
+            raw_bytes = img_bytes.tobytes()
+
+            if enc_key:
+                encrypted = encrypt_image(raw_bytes, enc_key)
+                filename = f"enrolled_{user_id}_{int(time.time())}.jpg.enc"
+                filepath = os.path.join(output_dir, filename)
+                with open(filepath, "wb") as f:
+                    f.write(encrypted)
+                os.chmod(filepath, 0o600)
+                logger.info("Saved encrypted enrollment image: %s", filepath)
+            else:
+                filename = f"enrolled_{user_id}_{int(time.time())}.jpg"
+                filepath = os.path.join(output_dir, filename)
+                with open(filepath, "wb") as f:
+                    f.write(raw_bytes)
+                os.chmod(filepath, 0o600)
+                logger.warning("Saved UNENCRYPTED enrollment image — set BIOMETRIC_ENCRYPTION_KEY for encryption")
+
         except Exception as e:
-            logger.error(f"Failed to save enrollment image for user {user_id}: {e}")
-    
+            logger.error("Failed to save enrollment image for user %s: %s", user_id, e)
+
     def close(self):
         """Close connections"""
         if hasattr(self, 'metadata_conn'):
@@ -258,3 +246,4 @@ class UserEnrollmentSystem:
             self.vector_conn.close()
         if hasattr(self, 'user_checker'):
             self.user_checker.close()
+        logger.info("Enrollment system closed")
