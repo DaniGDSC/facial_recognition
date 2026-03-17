@@ -86,7 +86,11 @@ def create_app() -> Flask:
         def wrapper(*args, **kwargs):
             if g.session is None:
                 return jsonify({'error': 'Authentication required'}), HTTPStatus.UNAUTHORIZED
-            if g.session.get('security_level') not in ('OPERATOR', 'ADMIN'):
+            # Re-verify operator role from RBAC DB (handles role changes/deletions)
+            rbac = app.extensions['rbac']
+            op_id = g.session.get('user_code')
+            current_role = rbac.get_operator_role(op_id) if op_id else None
+            if current_role not in ('OPERATOR', 'ADMIN'):
                 return jsonify({'error': 'Operator access required'}), HTTPStatus.FORBIDDEN
             return f(*args, **kwargs)
         return wrapper
@@ -173,15 +177,21 @@ def create_app() -> Flask:
         limiter.record_attempt(request.remote_addr or 'unknown')
 
         rec_sys = get_recognition_system()
-        result = rec_sys.recognize_face(image_data, enable_liveness=True, top_k=5)
+        client_ip = request.remote_addr or 'unknown'
+        result = rec_sys.recognize_face(image_data, enable_liveness=True, top_k=5, client_ip=client_ip)
+
+        # Redact user identity when no session — prevent reconnaissance
+        recognized = result.get('recognized', False)
+        user_info = result.get('user_info')
+        if g.session and recognized and user_info:
+            user_data = {'name': user_info['full_name'], 'user_code': user_info['user_code']}
+        else:
+            user_data = None
 
         return jsonify({
             'success': result.get('success', False),
-            'recognized': result.get('recognized', False),
-            'user': {
-                'name': result['user_info']['full_name'],
-                'user_code': result['user_info']['user_code'],
-            } if result.get('recognized') and result.get('user_info') else None,
+            'recognized': recognized,
+            'user': user_data,
             'liveness': {
                 'passed': result.get('liveness_result', {}).get('is_live', False),
                 'confidence': result.get('liveness_result', {}).get('confidence', 0.0),
@@ -209,7 +219,8 @@ def create_app() -> Flask:
         original_threshold = rec_sys.similarity_threshold
         try:
             rec_sys.similarity_threshold = threshold
-            result = rec_sys.recognize_face(image_data, enable_liveness=True, top_k=1)
+            client_ip = request.remote_addr or 'unknown'
+            result = rec_sys.recognize_face(image_data, enable_liveness=True, top_k=1, client_ip=client_ip)
         finally:
             rec_sys.similarity_threshold = original_threshold
 
@@ -252,7 +263,8 @@ def create_app() -> Flask:
         from enrollment_controller import UserEnrollmentSystem
         enrollment = UserEnrollmentSystem()
         try:
-            result = _enroll_with_image(enrollment, user_code, first_name, last_name, image_data)
+            client_ip = request.remote_addr or 'unknown'
+            result = enrollment.enroll_with_image(user_code, first_name, last_name, image_data, client_ip)
         finally:
             enrollment.close()
 
@@ -317,33 +329,6 @@ def _decode_base64_image(b64_string: str) -> np.ndarray | None:
         return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     except Exception:
         return None
-
-
-def _enroll_with_image(enrollment, user_code, first_name, last_name, image):
-    import uuid
-    import time as _time
-
-    uniqueness = enrollment.user_checker.check_user_code_uniqueness(user_code)
-    if "THẤT BẠI" in uniqueness or "already exists" in uniqueness:
-        return {'success': False, 'message': f'User code {user_code} already exists'}
-
-    embeddings = enrollment.recognizer.process_and_extract_from_array(image)
-    if embeddings is None:
-        return {'success': False, 'message': 'Feature extraction failed'}
-
-    embedding_vector = embeddings[0].cpu().numpy()
-    user_id = str(uuid.uuid4())
-    ts = int(_time.time())
-
-    if not enrollment._store_user_metadata(user_id, user_code, first_name, last_name, ts):
-        return {'success': False, 'message': 'Metadata storage failed'}
-    if not enrollment._store_user_embedding(user_id, user_code, embedding_vector, ts):
-        enrollment._rollback_metadata(user_id)
-        return {'success': False, 'message': 'Embedding storage failed'}
-
-    enrollment._log_enrollment_event(user_id, True, 1.0, "api")
-    enrollment._save_enrollment_image(image, user_id)
-    return {'success': True, 'user_id': user_id, 'message': 'Enrolled successfully'}
 
 
 if __name__ == '__main__':

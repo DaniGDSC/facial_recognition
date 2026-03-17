@@ -39,7 +39,7 @@ class TestSessionManager(unittest.TestCase):
     def test_expired_session_returns_none(self):
         mgr = SessionManager(session_ttl=1, max_sessions=10)
         token = mgr.create_session("u1", "1234567890", "John")
-        time.sleep(1.5)
+        time.sleep(2.5)  # Generous margin for int(time.time()) truncation
         self.assertIsNone(mgr.verify_token(token))
 
     def test_sliding_window_extends_expiry(self):

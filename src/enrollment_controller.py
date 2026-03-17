@@ -12,16 +12,9 @@ from facial_detection import LiveCapture
 from facial_recognition import FacialRecognizer
 from user_valid_check import UserCodeCheckSystem
 from db import get_metadata_connection, get_vector_connection
-from crypto import encrypt_image, compute_embedding_hmac
+from crypto import encrypt_image, compute_embedding_hmac, get_optional_key
 
 logger = logging.getLogger(__name__)
-
-def _get_optional_key(env_var: str) -> bytes | None:
-    """Load an optional hex-encoded key from env, return None if not set."""
-    raw = os.environ.get(env_var)
-    if not raw:
-        return None
-    return bytes.fromhex(raw)
 
 
 class UserEnrollmentSystem:
@@ -50,7 +43,7 @@ class UserEnrollmentSystem:
             uniqueness_result = self.user_checker.check_user_code_uniqueness(user_code)
             logger.info("Validation result: %s", uniqueness_result)
 
-            if "THẤT BẠI" in uniqueness_result or "already exists" in uniqueness_result:
+            if not uniqueness_result.get('available', False):
                 logger.warning("Enrollment blocked: user code %s already exists", user_code)
                 return {
                     'success': False, 'user_id': None,
@@ -117,7 +110,7 @@ class UserEnrollmentSystem:
             logger.info("STEP 4 passed: user data stored")
 
             # STEP 5: Finalize
-            self._log_enrollment_event(user_id, True, 1.0, "127.0.0.1")
+            self._log_enrollment_event(user_id, True, 1.0, "cli")
             self._save_enrollment_image(captured_face, user_id)
 
             logger.info("Enrollment completed: user_id=%s, user_code=%s", user_id, user_code)
@@ -135,6 +128,54 @@ class UserEnrollmentSystem:
                 'message': f"Enrollment error: {str(e)}",
                 'similarity_score': 0.0, 'liveness_passed': False
             }
+
+    def enroll_with_image(self, user_code: str, first_name: str, last_name: str,
+                         face_image: np.ndarray, client_ip: str = "api") -> Dict[str, Any]:
+        """Enroll a user from a pre-captured face image (no camera required).
+
+        Used by the API layer for image-upload-based enrollment.
+        """
+        logger.info("Starting image-based enrollment for user_code=%s", user_code)
+
+        try:
+            # Check uniqueness
+            result = self.user_checker.check_user_code_uniqueness(user_code)
+            if not result.get('available', False):
+                return {'success': False, 'user_id': None,
+                        'message': f"User code {user_code} already exists in database"}
+
+            # Extract features
+            embeddings = self.recognizer.process_and_extract_from_array(face_image)
+            if embeddings is None:
+                return {'success': False, 'user_id': None,
+                        'message': "Feature extraction failed"}
+
+            embedding_vector = embeddings[0].cpu().numpy()
+
+            # Store
+            user_id = str(uuid.uuid4())
+            ts = int(time.time())
+
+            if not self._store_user_metadata(user_id, user_code, first_name, last_name, ts):
+                return {'success': False, 'user_id': None,
+                        'message': "Metadata storage failed"}
+
+            if not self._store_user_embedding(user_id, user_code, embedding_vector, ts):
+                self._rollback_metadata(user_id)
+                return {'success': False, 'user_id': None,
+                        'message': "Embedding storage failed"}
+
+            self._log_enrollment_event(user_id, True, 1.0, client_ip)
+            self._save_enrollment_image(face_image, user_id)
+
+            logger.info("Image-based enrollment completed: user_id=%s", user_id)
+            return {'success': True, 'user_id': user_id,
+                    'message': "Enrolled successfully"}
+
+        except Exception as e:
+            logger.exception("Image-based enrollment failed for user_code=%s", user_code)
+            return {'success': False, 'user_id': None,
+                    'message': f"Enrollment error: {str(e)}"}
 
     def _store_user_metadata(self, user_id: str, user_code: str, first_name: str,
                            last_name: str, timestamp: int) -> bool:
@@ -161,7 +202,7 @@ class UserEnrollmentSystem:
             vector_str = '[' + ','.join(map(str, embedding_list)) + ']'
 
             # Compute HMAC if key is available
-            hmac_key = _get_optional_key("EMBEDDING_HMAC_KEY")
+            hmac_key = get_optional_key("EMBEDDING_HMAC_KEY")
             hmac_tag = compute_embedding_hmac(embedding_list, hmac_key) if hmac_key else None
 
             if hmac_tag:
@@ -215,7 +256,7 @@ class UserEnrollmentSystem:
             )
             os.makedirs(output_dir, exist_ok=True)
 
-            enc_key = _get_optional_key("BIOMETRIC_ENCRYPTION_KEY")
+            enc_key = get_optional_key("BIOMETRIC_ENCRYPTION_KEY")
             _, img_bytes = cv2.imencode(".jpg", face_image)
             raw_bytes = img_bytes.tobytes()
 

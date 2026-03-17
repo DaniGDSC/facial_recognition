@@ -1,3 +1,4 @@
+import getpass
 import logging
 import sys
 
@@ -331,7 +332,6 @@ def operator_login_logout():
         if not op_id:
             print("Cancelled")
             return
-        import getpass
         pin = getpass.getpass("Enter PIN: ")
         pin_confirm = getpass.getpass("Confirm PIN: ")
         if pin != pin_confirm:
@@ -353,7 +353,6 @@ def operator_login_logout():
     if not op_id:
         print("Cancelled")
         return
-    import getpass
     pin = getpass.getpass("PIN: ")
     if _rbac.authenticate_operator(op_id, pin):
         print(f"Welcome, {op_id} ({_rbac.current_role})")

@@ -98,6 +98,22 @@ class TestRBACManager(unittest.TestCase):
         self.assertIsNone(self.rbac.current_role)
         self.assertFalse(self.rbac.check_permission("enroll"))
 
+    def test_register_short_pin_fails(self):
+        result = self.rbac.register_operator("op1", "123")
+        self.assertFalse(result)
+        self.assertFalse(self.rbac.has_operators())
+
+    def test_get_operator_role_exists(self):
+        self.rbac.register_operator("op1", "1234", role=ROLE_OPERATOR)
+        self.assertEqual(self.rbac.get_operator_role("op1"), ROLE_OPERATOR)
+
+    def test_get_operator_role_admin(self):
+        self.rbac.register_operator("admin1", "admin", role=ROLE_ADMIN)
+        self.assertEqual(self.rbac.get_operator_role("admin1"), ROLE_ADMIN)
+
+    def test_get_operator_role_nonexistent(self):
+        self.assertIsNone(self.rbac.get_operator_role("ghost"))
+
     def test_unknown_action(self):
         self.rbac.register_operator("op1", "1234")
         self.rbac.authenticate_operator("op1", "1234")

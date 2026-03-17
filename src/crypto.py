@@ -90,3 +90,11 @@ def verify_embedding_hmac(embedding_vector: list[float], expected_hmac: str, key
     """Verify HMAC-SHA256 of an embedding vector (constant-time comparison)."""
     computed = compute_embedding_hmac(embedding_vector, key)
     return hmac.compare_digest(computed, expected_hmac)
+
+
+def get_optional_key(env_var: str) -> bytes | None:
+    """Load an optional hex-encoded key from env, return None if not set."""
+    raw = os.environ.get(env_var)
+    if not raw:
+        return None
+    return bytes.fromhex(raw)

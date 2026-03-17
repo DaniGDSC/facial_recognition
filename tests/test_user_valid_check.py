@@ -55,15 +55,15 @@ class TestUserCodeCheckSystem(unittest.TestCase):
         os.close(self.db_fd)
         os.unlink(self.db_path)
 
-    def test_existing_code_returns_failure(self):
+    def test_existing_code_returns_not_available(self):
         result = self.system.check_user_code_uniqueness("1234567890")
-        self.assertIn("THẤT BẠI", result)
-        self.assertIn("already exists", result)
+        self.assertFalse(result['available'])
+        self.assertIn("already exists", result['message'])
 
-    def test_new_code_returns_success(self):
+    def test_new_code_returns_available(self):
         result = self.system.check_user_code_uniqueness("9999999999")
-        self.assertIn("THÀNH CÔNG", result)
-        self.assertIn("is available", result)
+        self.assertTrue(result['available'])
+        self.assertIn("is available", result['message'])
 
     def test_get_user_info_found(self):
         info = self.system.get_user_info("1234567890")
@@ -81,7 +81,7 @@ class TestUserCodeCheckSystem(unittest.TestCase):
         """Ensure parameterized queries prevent SQL injection."""
         malicious = "'; DROP TABLE user_profiles; --"
         result = self.system.check_user_code_uniqueness(malicious)
-        self.assertIn("THÀNH CÔNG", result)
+        self.assertTrue(result['available'])
         # Table should still exist
         conn = sqlite3.connect(self.db_path)
         cursor = conn.execute("SELECT COUNT(*) FROM user_profiles")

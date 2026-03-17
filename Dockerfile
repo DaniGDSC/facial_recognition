@@ -36,4 +36,4 @@ ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
 
-CMD ["python", "application/api.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "application.api:create_app()"]

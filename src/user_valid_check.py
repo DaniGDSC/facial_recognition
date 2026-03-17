@@ -4,30 +4,35 @@ from config import DATABASE_FILE
 
 logger = logging.getLogger(__name__)
 
+
 class UserCodeCheckSystem:
     def __init__(self):
         self.metadata_client = sqlite3.connect(DATABASE_FILE)
         self.metadata_client.row_factory = sqlite3.Row
 
-    def check_user_code_uniqueness(self, user_code: str) -> str:
-        """Check if user code already exists in database"""
+    def check_user_code_uniqueness(self, user_code: str) -> dict:
+        """Check if user code already exists in database.
+
+        Returns:
+            dict with 'available' (bool) and 'message' (str) keys.
+        """
         try:
             cursor = self.metadata_client.cursor()
             cursor.execute(
-                "SELECT user_code FROM user_profiles WHERE user_code = ?", 
+                "SELECT user_code FROM user_profiles WHERE user_code = ?",
                 (user_code,)
             )
-            
+
             existing_user = cursor.fetchone()
-            
+
             if existing_user:
-                return f"THẤT BẠI: User code {user_code} already exists"
+                return {'available': False, 'message': f"User code {user_code} already exists"}
             else:
-                return f"THÀNH CÔNG: User code {user_code} is available"
-                
+                return {'available': True, 'message': f"User code {user_code} is available"}
+
         except Exception as e:
-            logger.error(f"Database error during user code check: {e}")
-            return "THẤT BẠI: Database error occurred"
+            logger.error("Database error during user code check: %s", e)
+            return {'available': False, 'message': "Database error occurred"}
 
     def get_user_info(self, user_code: str) -> dict:
         """Get user information by user code"""
@@ -35,12 +40,12 @@ class UserCodeCheckSystem:
             cursor = self.metadata_client.cursor()
             cursor.execute("""
                 SELECT user_id, user_code, first_name, last_name, account_status
-                FROM user_profiles 
+                FROM user_profiles
                 WHERE user_code = ?
             """, (user_code,))
-            
+
             user = cursor.fetchone()
-            
+
             if user:
                 return {
                     'found': True,
@@ -53,9 +58,9 @@ class UserCodeCheckSystem:
                 }
             else:
                 return {'found': False, 'message': 'User not found'}
-                
+
         except Exception as e:
-            logger.error(f"Database error during user info lookup: {e}")
+            logger.error("Database error during user info lookup: %s", e)
             return {'found': False, 'message': 'Database error occurred'}
 
     def close(self):

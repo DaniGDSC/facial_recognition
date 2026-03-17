@@ -12,6 +12,7 @@ import hashlib
 import logging
 import os
 import sqlite3
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,10 @@ class RBACManager:
             logger.error("Invalid role for operator registration: %s", role)
             return False
 
+        if len(pin) < 4:
+            logger.error("PIN must be at least 4 characters")
+            return False
+
         salt = os.urandom(16)
         pin_hash = _hash_pin(pin, salt)
 
@@ -83,7 +88,7 @@ class RBACManager:
         try:
             conn.execute(
                 "INSERT INTO operator_accounts (operator_id, pin_hash, pin_salt, role, created_at) VALUES (?, ?, ?, ?, ?)",
-                (operator_id, pin_hash, salt.hex(), role, int(__import__("time").time())),
+                (operator_id, pin_hash, salt.hex(), role, int(time.time())),
             )
             conn.commit()
             logger.info("Registered operator: %s (role=%s)", operator_id, role)
@@ -162,6 +167,21 @@ class RBACManager:
         logger.info("Operator %s logged out", self._current_operator)
         self._current_role = None
         self._current_operator = None
+
+    def get_operator_role(self, operator_id: str) -> str | None:
+        """Look up the current role for an operator from the database.
+
+        Returns the role string or None if the operator does not exist.
+        """
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT role FROM operator_accounts WHERE operator_id = ?",
+                (operator_id,),
+            ).fetchone()
+            return row["role"] if row else None
+        finally:
+            conn.close()
 
     def has_operators(self) -> bool:
         """Check whether any operator accounts exist (for first-run setup)."""

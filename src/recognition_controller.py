@@ -11,16 +11,9 @@ from facial_detection import LiveCapture, FacialDetectorMTCNN
 from liveness import MultiFactorLiveness
 from facial_recognition import FacialRecognizer
 from db import get_metadata_connection, get_vector_connection
-from crypto import verify_embedding_hmac
+from crypto import verify_embedding_hmac, get_optional_key
 
 logger = logging.getLogger(__name__)
-
-def _get_optional_key(env_var: str) -> bytes | None:
-    """Load an optional hex-encoded key from env, return None if not set."""
-    raw = os.environ.get(env_var)
-    if not raw:
-        return None
-    return bytes.fromhex(raw)
 
 
 class FacialRecognitionSystem:
@@ -74,17 +67,19 @@ class FacialRecognitionSystem:
         try:
             cursor = self.vector_conn.cursor()
 
-            # Try loading hmac_tag column; fall back if it doesn't exist
-            try:
-                cursor.execute("SELECT user_id, face_vector, hmac_tag FROM face_templates")
-                has_hmac_col = True
-            except Exception:
-                self.vector_conn.rollback() if hasattr(self.vector_conn, 'rollback') else None
-                cursor = self.vector_conn.cursor()
-                cursor.execute("SELECT user_id, face_vector FROM face_templates")
-                has_hmac_col = False
+            # Detect hmac_tag column via information_schema
+            cursor.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'face_templates' AND column_name = 'hmac_tag'
+            """)
+            has_hmac_col = cursor.fetchone() is not None
 
-            hmac_key = _get_optional_key("EMBEDDING_HMAC_KEY")
+            if has_hmac_col:
+                cursor.execute("SELECT user_id, face_vector, hmac_tag FROM face_templates")
+            else:
+                cursor.execute("SELECT user_id, face_vector FROM face_templates")
+
+            hmac_key = get_optional_key("EMBEDDING_HMAC_KEY")
             embeddings = []
 
             for row in cursor.fetchall():
@@ -215,7 +210,7 @@ class FacialRecognitionSystem:
         return self.liveness_detector.check_liveness(image, face_box, landmarks)
 
     def recognize_face(self, face_image: np.ndarray, enable_liveness: bool = True,
-                      top_k: int = 5) -> Dict[str, Any]:
+                      top_k: int = 5, client_ip: str = "unknown") -> Dict[str, Any]:
         start_time = time.time()
 
         try:
@@ -280,7 +275,7 @@ class FacialRecognitionSystem:
 
             # Log event
             self._log_event('Recognition', best_match['user_code'] if best_match else None,
-                          recognized, best_similarity, liveness_result['is_live'])
+                          recognized, best_similarity, liveness_result['is_live'], client_ip)
 
             processing_time = time.time() - start_time
             message = f"User recognized: {best_match['full_name']}" if recognized else "No match found"
@@ -321,7 +316,7 @@ class FacialRecognitionSystem:
             return {'success': False, 'message': f'Camera error: {str(e)}'}
 
     def _log_event(self, event_type: str, user_code: str, success: bool,
-                   similarity: float, liveness_passed: bool):
+                   similarity: float, liveness_passed: bool, client_ip: str = "unknown"):
         try:
             cursor = self.metadata_conn.cursor()
             cursor.execute("""
@@ -330,7 +325,7 @@ class FacialRecognitionSystem:
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (user_code, int(time.time()),
                   f'{event_type}_{"Success" if success else "Failed"}',
-                  similarity, 0 if liveness_passed else 1, "127.0.0.1"))
+                  similarity, 0 if liveness_passed else 1, client_ip))
             self.metadata_conn.commit()
         except Exception as e:
             logger.error("Failed to log %s event for %s: %s", event_type, user_code, e)

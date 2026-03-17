@@ -55,6 +55,30 @@ jobs:
       - name: Run pip-audit
         run: pip-audit --strict
 
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install detect-secrets
+        run: pip install detect-secrets
+      - name: Scan for secrets
+        run: |
+          detect-secrets scan --all-files --exclude-files '\.lock$' --exclude-files '\.baseline$' \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          results = data.get('results', {})
+          if any(results.values()):
+              for f, findings in results.items():
+                  for finding in findings:
+                      print(f\"::error file={f},line={finding['line_number']}::Potential secret: {finding['type']}\")
+              sys.exit(1)
+          print('No secrets detected')
+          "
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

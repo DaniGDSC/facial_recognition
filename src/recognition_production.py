@@ -47,17 +47,17 @@ class ProductionRecognitionInterface:
                 
             except asyncio.TimeoutError:
                 AUTH_FAILURES.labels(reason='timeout').inc()
-                self.logger.error(f"Auth timeout: {request.request_id}")
+                self.logger.error("Auth timeout: %s", request.request_id)
                 return {'success': False, 'error': 'timeout'}
-                
+
             except Exception as e:
                 AUTH_FAILURES.labels(reason='error').inc()
-                self.logger.exception(f"Auth error: {request.request_id}")
+                self.logger.exception("Auth error: %s", request.request_id)
                 return {'success': False, 'error': str(e)}
     
     async def _do_authentication(self, request: AuthRequest) -> dict:
         """Actual auth logic (run in thread pool for CPU-bound work)"""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         
         # Run blocking camera/recognition in thread pool
         result = await loop.run_in_executor(

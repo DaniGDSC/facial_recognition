@@ -27,6 +27,12 @@ def _get_session_secret() -> bytes:
     """Load session signing secret from environment."""
     raw = os.environ.get(_SESSION_SECRET_ENV)
     if not raw:
+        env = os.environ.get("FLASK_ENV", os.environ.get("APP_ENV", ""))
+        if env.lower() == "production":
+            raise ValueError(
+                f"{_SESSION_SECRET_ENV} is required in production. "
+                "Generate with: python -c \"import os; print(os.urandom(32).hex())\""
+            )
         logger.warning(
             "SESSION_SECRET_KEY not set — generating ephemeral key (sessions will not survive restart)"
         )
